@@ -3,11 +3,11 @@
 set -e
 
 # === Configuration ===
-SDK_ENV="/home/anpa8480/frdm-ubuntu/sdk/environment-setup-armv8a-poky-linux"
+SDK_ENV="/home/$(whoami)/frdm-ubuntu/sdk/environment-setup-armv8a-poky-linux"
 UBOOT_REPO="https://github.com/nxp-imx/uboot-imx.git"
 UBOOT_HASH="de16f4f1722"
 UBOOT_DIR="uboot-imx"
-PATCHES_DIR="/home/anpa8480/frdm-ubuntu/custom/patch"
+PATCHES_DIR="/home/$(whoami)/frdm-ubuntu/custom/patch"
 
 ATF_REPO="https://github.com/nxp-imx/imx-atf.git"
 ATF_COMMIT="28affcae957cb8194917b5246276630f9e6343e1"
@@ -85,7 +85,7 @@ source venv/bin/activate
 pip install cryptography pyelftools
 
 echo "export CROSS_COMPILE=$CROSS_COMPILE && export SDKPATH=$SDKPATH && export OPTEE_BUILD_DIR=$OPTEE_BUILD_DIR"
-SYSROOT=/home/anpa8480/frdm-ubuntu/sdk/sysroots/armv8a-poky-linux
+SYSROOT=/home/$(whoami)/frdm-ubuntu/sdk/sysroots/armv8a-poky-linux
 LIBGCC_DIR="$SYSROOT/lib/aarch64-poky-linux/13.3.0"
 PATH="$(pwd)/venv/bin:$PATH" \
 LIBGCC_LOCATE_CFLAGS="-L${SDKPATH}/sysroots/armv8a-poky-linux/usr/lib/aarch64-poky-linux/13.3.0" \
