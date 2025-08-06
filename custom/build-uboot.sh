@@ -56,18 +56,39 @@ if [ ! -d "$ATF_DIR" ]; then
 fi
 
 cd "$ATF_DIR"
+git clean -fdx
+git reset --hard
 git fetch --all
 git checkout "$ATF_COMMIT"
 
 echo "🔨 Building TF-A (bl31)..."
-make PLAT=imx93 \
-     CROSS_COMPILE="${CROSS_COMPILE}" \
-     LD="${CROSS_COMPILE}gcc" \
-     LDFLAGS="-Wl,--no-warn-rwx-segment" \
-     bl31 -j$(nproc)
+unset CFLAGS
+unset LDFLAGS
+unset AS
+unset LD
 
-cp build/imx93/release/bl31.bin ../$UBOOT_DIR/
+#make -j$(nproc) \
+#  PLAT=imx93 \
+#  CROSS_COMPILE="${CROSS_COMPILE}" \
+#  CC="${CROSS_COMPILE}gcc" \
+#  LD="${CROSS_COMPILE}ld" \
+#  DEBUG=0 \
+#  IMX_BOOT_UART_BASE= \
+#  BUILD_BASE=build-optee \
+
+make -j$(nproc) \
+  CROSS_COMPILE=aarch64-poky-linux- \
+  PLAT=imx93 \
+  LD=aarch64-poky-linux-ld \
+  CC=aarch64-poky-linux-gcc  \
+  IMX_BOOT_UART_BASE= DEBUG=0 \
+  BUILD_BASE=build-optee \
+  SPD=opteed \
+  bl31
+
+cp build-optee/imx93/release/bl31.bin ../$UBOOT_DIR/
 cd ..
+#cp iMX93/bl31.bin ./$UBOOT_DIR/
 
 # === Step 3: Build OP-TEE ===
 if [ ! -d "$OPTEE_DIR" ]; then
@@ -76,6 +97,8 @@ if [ ! -d "$OPTEE_DIR" ]; then
 fi
 
 cd "$OPTEE_DIR"
+git clean -fdx
+git reset --hard
 git fetch --all
 git checkout "$OPTEE_COMMIT"
 
@@ -90,26 +113,25 @@ LIBGCC_DIR="$SYSROOT/lib/aarch64-poky-linux/13.3.0"
 PATH="$(pwd)/venv/bin:$PATH" \
 LIBGCC_LOCATE_CFLAGS="-L${SDKPATH}/sysroots/armv8a-poky-linux/usr/lib/aarch64-poky-linux/13.3.0" \
 LDFLAGS="-L${SDKPATH}/sysroots/armv8a-poky-linux/usr/lib/aarch64-poky-linux/13.3.0" \
-make -j$(nproc) \
-  V=1 \
-  COMPILER=gcc \
+make -j$(nproc) -C . \
   PLATFORM=imx-mx93evk \
+  O="${OPTEE_BUILD_DIR}" \
+  ARCH=arm \
   CFG_ARM64_core=y \
+  CFG_TEE_CORE_LOG_LEVEL=0 \
+  CFG_TEE_TA_LOG_LEVEL=0 \
+  COMPILER=gcc \
   CROSS_COMPILE64="${CROSS_COMPILE}" \
   CROSS_COMPILE_core="${CROSS_COMPILE}" \
   CROSS_COMPILE_ta_arm64="${CROSS_COMPILE}" \
   OPTEE_CLIENT_EXPORT="${SYSROOT}/usr" \
   TEEC_EXPORT="${SYSROOT}/usr" \
-  NOWERROR=1 \
-  ta-targets=ta_arm64 \
-  O="${OPTEE_BUILD_DIR}" \
-  ARCH=arm \
   LIBGCC_LOCATE_CFLAGS="-L${LIBGCC_DIR}" \
   LDFLAGS="--sysroot=${SYSROOT} -L${LIBGCC_DIR}" \
   CFLAGS="--sysroot=${SYSROOT}" \
-  -C .
+  NOWERROR=1
 
-cp "${OPTEE_BUILD_DIR}/core/tee.bin" ../$UBOOT_DIR/
+cp "$OPTEE_BUILD_DIR/core/tee-raw.bin" ../$UBOOT_DIR/tee.bin
 cd ..
 
 # === Step 4: Build U-Boot ===
@@ -124,19 +146,21 @@ make -j$(nproc)
 echo "✅ U-Boot build (with bl31.bin and tee.bin) complete."
 cd ..
 
+# === Step 5: mkimage ===
 if [ ! -d "$MKIMG_DIR" ]; then
-    echo "🔧 Cloning mkimage..."
-    git clone "$MKIMG_REPO" "$MKIMG_DIR"
-    cd "$MKIMG_DIR"
-    git fetch --all
-    echo "🔀 Checking out mkimage commit: $MKIMG_COMMIT"
-    git checkout "$MKIMG_COMMIT"
-    cp ../patch/lpddr* iMX93
-    cp ../uboot-imx/spl/u-boot-spl.bin iMX93
-    cp ../uboot-imx/u-boot.bin iMX93
-    cp ../uboot-imx/bl31.bin iMX93
-    make SOC=iMX93 flash_singleboot_no_ahabfw
-    dd if=iMX93/flash.bin of=bootable.img bs=1K seek=32 conv=fsync
+  git clone https://github.com/nxp-imx/imx-mkimage.git "$MKIMG_DIR"
+  cd "$MKIMG_DIR"
+  git checkout "$MKIMG_COMMIT"
 else
-    echo "$MKIMG_DIR present"
+  cd "$MKIMG_DIR"
+  git checkout "$MKIMG_COMMIT"
+  git clean -fdx
 fi
+cp ../patch/lpddr* iMX93
+cp ../patch/mx93a1-ahab-container.img iMX93
+cp ../uboot-imx/spl/u-boot-spl.bin iMX93
+cp ../uboot-imx/u-boot.bin iMX93
+cp ../uboot-imx/bl31.bin iMX93
+cp ../uboot-imx/tee.bin iMX93
+make SOC=iMX93 flash_singleboot TEE=tee.bin
+dd if=iMX93/flash.bin of=bootable.img bs=1K seek=32 conv=fsync

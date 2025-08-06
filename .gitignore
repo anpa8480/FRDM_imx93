@@ -1,3 +1,7 @@
 sdk
 sdk-install
+custom/uboot-imx
+custom/imx-atf
+custom/imx-mkimage
+custom/optee_os
 
